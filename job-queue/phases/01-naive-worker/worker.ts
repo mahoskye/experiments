@@ -23,8 +23,6 @@ while(true){
 		LIMIT 1
 	`).get({$now: now()}) as Job | null;
 
-	await Bun.sleep(100); // Intentional delay to give workers time to double dip
-
 	if(!job) {
 		await sleepWhenEmpty();
 		continue;
