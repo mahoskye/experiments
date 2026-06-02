@@ -55,6 +55,7 @@ atomic claiming, retries, leases, dead-letter handling, or idempotency yet.
 - `worker.ts`: naive worker loop with an intentional select/update race window
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
+- `run-double-claim-race.sh`: resets, enqueues, and runs two workers together
 
 ## Jobs Table
 
@@ -83,26 +84,32 @@ bun install
 
 ## Useful Commands
 
-Reset the local database:
+Run the double-claim race exercise:
+
+```bash
+./run-double-claim-race.sh
+```
+
+The script resets the database, enqueues 10 jobs, starts workers `A` and `B`,
+and stops them after 3 seconds. Watch the worker output for the same job id
+being run by both workers.
+
+You can override the job count and observation window:
+
+```bash
+./run-double-claim-race.sh 25 5s
+```
+
+Reset the local database manually:
 
 ```bash
 bun run reset.ts
 ```
 
-Enqueue jobs:
+Enqueue jobs manually:
 
 ```bash
-bun run enqueue.ts 100
-```
-
-Run two workers in separate terminals:
-
-```bash
-bun run worker.ts A
-```
-
-```bash
-bun run worker.ts B
+bun run enqueue.ts 10
 ```
 
 Inspect state:

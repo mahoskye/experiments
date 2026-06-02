@@ -6,8 +6,8 @@ export const db = new Database("queue.db", {create: true});
 // busy_timeout makes SQLite wait briefly instead of immediately throwing
 // SQLITE_BUSY when multiple workers try to write
 
-db.run("PRAGMA journal_mode = WAL;");
 db.run("PRAGMA busy_timeout = 5000;");
+db.run("PRAGMA journal_mode = WAL;");
 db.run("PRAGMA synchronous = NORMAL;");
 
 db.run(`

@@ -14,6 +14,7 @@ worker updates it. If both continue, the same job can execute twice.
 - `worker.ts`: naive worker with an intentional delay between select and update
 - `inspect.ts`: prints job state
 - `reset.ts`: removes local database files
+- `run-double-claim-race.sh`: resets, enqueues, and runs two workers together
 
 ## Commands
 
@@ -23,21 +24,33 @@ Install dependencies:
 bun install
 ```
 
-Reset state and enqueue enough work to observe the race:
+Run the bundled race exercise:
+
+```bash
+./run-double-claim-race.sh
+```
+
+The script resets the database, enqueues 10 jobs, starts workers `A` and `B`,
+and stops them after 3 seconds. Watch the worker output for the same job id
+being run by both workers.
+
+You can override the job count and observation window:
+
+```bash
+./run-double-claim-race.sh 25 5s
+```
+
+Manual reset and enqueue:
 
 ```bash
 bun run reset.ts
-bun run enqueue.ts 100
+bun run enqueue.ts 10
 ```
 
-Run two workers in separate terminals:
+Manual two-worker command:
 
 ```bash
-bun run worker.ts A
-```
-
-```bash
-bun run worker.ts B
+timeout 3s bash -c 'bun run worker.ts A & bun run worker.ts B & wait'
 ```
 
 Inspect state from another terminal:

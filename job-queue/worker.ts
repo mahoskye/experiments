@@ -2,6 +2,7 @@ import {db, now} from "./db";
 import {handlers} from "./handlers"
 
 const workerId = process.argv[2] ?? "worker-1";
+const startDelayMs = Number(process.env.START_DELAY_MS ?? 0);
 
 type Job = {
 	id: number;
@@ -11,6 +12,11 @@ type Job = {
 
 async function sleepWhenEmpty() {
 	await Bun.sleep(500);
+}
+
+if (startDelayMs > 0) {
+	console.log(`${workerId} waiting ${startDelayMs}ms before starting`);
+	await Bun.sleep(startDelayMs);
 }
 
 while(true){

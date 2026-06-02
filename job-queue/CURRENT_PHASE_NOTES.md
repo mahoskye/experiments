@@ -20,16 +20,24 @@ phase README polished and concise; do not copy rough notes verbatim.
 reset the state:
 ```
 bun run reset.ts
-bun run enqueue.ts 100
+bun run enqueue.ts 10
 ```
 
-Using two separate terminals:
+Bundled exercise script:
 ```
-bun run worker.ts A
-```
-
-```
-bun run worker.ts B
+./run-double-claim-race.sh
 ```
 
-watch the output of the terminals, look for any entries where worker A and worker B both perform the same task
+Override job count and duration:
+```
+./run-double-claim-race.sh 25 5s
+```
+
+Manual worker command:
+```
+timeout 3s bash -c 'bun run worker.ts A & bun run worker.ts B & wait'
+```
+
+`timeout` exits with 124 because the workers loop forever. That is expected.
+
+watch the output, look for any entries where worker A and worker B both perform the same task
