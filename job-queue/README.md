@@ -29,33 +29,30 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root currently matches phase 2a: a deliberately reproducible double-claim
-race.
+The root currently matches phase 2b: an atomic claim that prevents two workers
+from claiming the same queued job.
 
-Phase 2a teaches why select-then-update is not a safe claim when more than one
-worker is running. The worker intentionally waits after selecting a queued job
-and before marking it `running`, giving another worker time to select the same
-row.
+Phase 2b repairs the phase 2a race by replacing separate select-then-update
+steps with one `UPDATE ... RETURNING` statement. The worker only runs a job if
+the update returned the row it claimed.
 
 ```text
-worker A: SELECT queued job 1
-worker B: SELECT queued job 1
-worker A: UPDATE job 1 to running
-worker B: UPDATE job 1 to running
+worker A: UPDATE one queued row to running RETURNING job 1
+worker B: UPDATE one queued row to running RETURNING job 2
 ```
 
-This version intentionally demonstrates duplicate execution. It does not solve
-atomic claiming, retries, leases, dead-letter handling, or idempotency yet.
+This version solves duplicate claims for queued work. It does not solve retries,
+dead-letter handling, crash recovery, or idempotency yet.
 
 ## Files
 
 - `db.ts`: opens SQLite, applies queue-related pragmas, and creates the `jobs` table
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
-- `worker.ts`: naive worker loop with an intentional select/update race window
+- `worker.ts`: worker loop with an atomic `UPDATE ... RETURNING` claim
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
-- `run-double-claim-race.sh`: resets, enqueues, and runs two workers together
+- `run-atomic-claim.sh`: resets, enqueues, runs two workers, and checks for duplicate claims
 
 ## Jobs Table
 
@@ -84,20 +81,20 @@ bun install
 
 ## Useful Commands
 
-Run the double-claim race exercise:
+Run the atomic-claim exercise:
 
 ```bash
-./run-double-claim-race.sh
+./run-atomic-claim.sh
 ```
 
 The script resets the database, enqueues 10 jobs, starts workers `A` and `B`,
-and stops them after 3 seconds. Watch the worker output for the same job id
-being run by both workers.
+and stops them after 3 seconds. It checks the worker output for duplicate job
+claims.
 
 You can override the job count and observation window:
 
 ```bash
-./run-double-claim-race.sh 25 5s
+./run-atomic-claim.sh 25 5s
 ```
 
 Reset the local database manually:

@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 2a, reproducable double-claim race
+Current root state: phase 2b, atomic claim prevents double-claim race
 
 ## Snapshot Notes
 
@@ -25,12 +25,12 @@ bun run enqueue.ts 10
 
 Bundled exercise script:
 ```
-./run-double-claim-race.sh
+./run-atomic-claim.sh
 ```
 
 Override job count and duration:
 ```
-./run-double-claim-race.sh 25 5s
+./run-atomic-claim.sh 25 5s
 ```
 
 Manual worker command:
@@ -40,4 +40,16 @@ timeout 3s bash -c 'bun run worker.ts A & bun run worker.ts B & wait'
 
 `timeout` exits with 124 because the workers loop forever. That is expected.
 
-watch the output, look for any entries where worker A and worker B both perform the same task
+watch the output; the same job id should not be claimed by both workers
+
+phase 2b changed the claim from select-then-update to one update statement:
+
+```
+UPDATE jobs SET ... WHERE id = (SELECT ... LIMIT 1) RETURNING ...
+```
+
+`RETURNING` gives the worker the row it actually claimed. The `ClaimedJob` type is
+just the TypeScript shape for that returned row.
+
+expect a mix of succeeded and failed rows because the handler still randomly
+throws. The claim lesson is about avoiding duplicate job ids in worker output.

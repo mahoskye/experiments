@@ -11,6 +11,7 @@ that belonged to that lesson.
 - `00-starting-point`: the durable row model, handler registry, and helper scripts
 - `01-naive-worker`: producer plus a single naive worker lifecycle
 - `02a-double-claim-race`: deliberate race script showing why select-then-update is not an atomic claim
+- `02b-atomic-claim`: atomic update-and-return claim that prevents duplicate claims
 
 ## Working Style
 
