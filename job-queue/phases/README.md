@@ -17,6 +17,7 @@ that belonged to that lesson.
 - `05b-heartbeats`: heartbeat lease renewal for healthy long-running workers
 - `05c-fencing`: lock-version fencing that discards stale worker settlement
 - `06-idempotency`: idempotent side-effect writes with logical deduplication keys
+- `07-monitoring`: queue depth and oldest queued age as basic operational signals
 
 ## Working Style
 

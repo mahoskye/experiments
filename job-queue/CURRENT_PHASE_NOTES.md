@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 6 - idempotency
+Current root state: phase 7 - monitoring
 
 ## Snapshot Notes
 
@@ -17,10 +17,14 @@ phase README polished and concise; do not copy rough notes verbatim.
 
 ---
 
-concept: at-least-once execution means the same logical work may run more than once
+concept: you operate a queue by watching its shape, not just checking whether workers are alive
 
-leases and retries recover work, but they also make duplicate execution possible. Example: a worker charges an account, then crashes before marking the job succeeded. the reaper requeues the job. another worker runs it again. without idempotency, the account is charged twice
+we'll create a stats script that will monitor things like count by status and oldest queued job
 
-to test this we'll expand the db to have a side effects table with dedup_key, info, and created_at
+we'll enqueue many jobs, run stats, start the workers and watch the queue drain, we'll stop workers while jobs remain queued, then watch oldest queued age climb
 
-we'll also add a handler for charge-account that inserts into the table
+this should demonstrate
+- queue depth tells you how much work exists
+- oldest queued age tells you whether the system is keeping up
+- dead letter count tells you whether work is failing in a way people must inspect
+- a worker can be alive while the queue is still unhealthy

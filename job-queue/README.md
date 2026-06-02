@@ -29,24 +29,23 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 6: idempotent side effects.
+The root is currently phase 7: monitoring queue shape.
 
-This builds on leases, retries, reaping, and fencing. Those recovery mechanisms
-make at-least-once execution visible: the same logical work may run more than
-once. The `charge-account` handler records its side effect using a stable
-`dedupKey`, and the database prevents duplicate side-effect rows.
+This phase adds a small stats surface for operating the queue. A worker process
+can be alive while the queue is still unhealthy, so the useful signals are the
+shape of the durable rows: how many jobs are queued, running, succeeded, or dead,
+and how long the oldest queued job has been waiting.
 
 ```text
-job 1 charges account a1 with dedupKey charge-123
-job 2 repeats the same logical charge with dedupKey charge-123
-both jobs succeed
-only one side-effect row is inserted
+queued depth: 80
+workers run briefly
+queued depth: 60
+workers stop
+oldest queued age continues to climb
 ```
 
-SQLite enforces the idempotency key with `ON CONFLICT(dedup_key) DO NOTHING`.
-Different databases use different SQL syntax, but the concept is the same:
-choose a stable logical key, enforce uniqueness, and treat duplicate writes as
-"already done."
+The point is not a sophisticated metrics system yet. The point is learning which
+queue signals matter before adding dashboards, alerts, or background monitoring.
 
 ## Files
 
@@ -59,8 +58,9 @@ choose a stable logical key, enforce uniqueness, and treat duplicate writes as
 - `reaper.ts`: returns expired running jobs to `queued`
 - `dead-letter.ts`: operator tool that requeues a dead job by id
 - `inspect.ts`: prints current jobs for debugging
+- `stats.ts`: prints count by status and oldest queued job age
 - `reset.ts`: removes local SQLite database files
-- `run-idempotency.sh`: runs duplicate logical charge jobs and verifies one side effect
+- `run-monitoring.sh`: exercises the stats view while workers drain part of the queue
 
 ## Jobs Table
 
@@ -89,20 +89,33 @@ bun install
 
 ## Useful Commands
 
-Run the idempotency exercise:
+Run the monitoring exercise:
 
 ```bash
-./run-idempotency.sh
+./run-monitoring.sh
 ```
 
-The script resets the database, enqueues two `charge-account` jobs with the same
-logical `dedupKey`, runs workers, and verifies that both jobs succeeded but only
-one `side_effects` row was written.
+The script resets the database, enqueues many jobs, prints stats, runs workers
+briefly, prints stats again, stops workers while queued jobs remain, then waits
+and prints stats a final time. The oldest queued age should climb while workers
+are stopped.
 
-You can override the job count, dedup key, and observation window:
+You can override the job count, worker window, and stopped-worker wait:
 
 ```bash
-./run-idempotency.sh 2 charge-123 3s
+./run-monitoring.sh 80 2s 3
+```
+
+Run stats once:
+
+```bash
+bun run stats.ts --once
+```
+
+Watch stats continuously:
+
+```bash
+bun run stats.ts
 ```
 
 Reset the local database manually:
@@ -115,12 +128,6 @@ Enqueue jobs manually:
 
 ```bash
 bun run enqueue.ts 10
-```
-
-Enqueue duplicate logical charge jobs manually:
-
-```bash
-bun run enqueue-charge-account.ts 2 charge-123 a1 42
 ```
 
 Inspect state:
