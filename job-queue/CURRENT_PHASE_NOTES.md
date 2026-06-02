@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 3 retried with backoff and jitter
+Current root state: phase 4 dead letter and manual replay
 
 ## Snapshot Notes
 
@@ -17,16 +17,21 @@ phase README polished and concise; do not copy rough notes verbatim.
 
 ---
 
-concept: transient failures should retry later instead of becoming final failures immediately
+concept: poison jobs must not block the queue forever
 
-in phase 1, every thrown error becomes failed. that loses recoverable work. in most systems (smtp timeout, network timeout, sql deadlock or temporary outages) should be retried
+a poison job is work that will never succeed without human intervention: invalid sample data, bad destination address, missing authorization, malformed payload, and similar cases
 
-we'll add a random delay to prevent jobs from retrying at the exact same time
+we'll build a requeue-dead operator tool to move a dead job back to queued after we fix the underlying problem
 
-we'll enqueue 20 send-email jobs and run 2 workers
-we should see failed email attempts return to queued with a future available_at
+we'll lower the max_attempts for new jobs
+run the workers until some land in a dead status
+inspect then requeue
 
-should show that a failure is not automatically final
-available_at is the shared mechanism for delayed jobs and retry delays
-permanent failures and transient failures need different handling
-retrying immediately can make outages worse; backoff and jitter reduces pressure
+dead letter is not handling in and of itself, it's a quarantine
+manual replay is part of operating a queue
+a permanently broken job should not prevent unrelated jobs from flowing
+
+requeue should be manual and one job at a time
+review the payload, handler, and any underlying external data or process before replay
+the repair might be a payload update, a handler/process fix, or no payload change at all
+once the job represents the work we want to retry, requeue it by id

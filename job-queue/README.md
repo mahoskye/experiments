@@ -29,23 +29,22 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 3: transient failures retry with backoff and jitter
-instead of immediately becoming final failures.
+The root is currently phase 4: dead-letter handling and manual replay.
 
-This builds on phase 2b's atomic claim. The worker still claims one queued job
-with `UPDATE ... RETURNING`, then increments `attempts` when the job starts. If
-the handler throws a transient error and attempts remain, the worker returns the
-job to `queued` with a later `available_at` time.
+This builds on phase 3's retry behavior. The worker retries transient failures
+until `attempts` reaches `max_attempts`. New jobs now default to `max_attempts =
+2`, so dead-letter behavior is easy to observe during the exercise.
 
 ```text
-job 5 attempt 1: SMTP timeout
-job 5 status: queued, available_at: future retry time
-job 5 attempt 2: succeeds or retries again
+job 5 attempt 1: unknown job type
+job 5 attempt 2: unknown job type
+job 5 status: dead
 ```
 
-If the worker sees a permanent error, or if a job has exhausted its configured
-attempts, the job moves to `dead`. Crash recovery and idempotent handlers are
-still later lessons.
+The `dead-letter.ts` operator tool moves one dead job back to `queued` after an
+operator has investigated or fixed the underlying problem. Replay is deliberately
+manual: each dead job is reviewed, repaired if needed, and resumed by id. Crash
+recovery and idempotent handlers are still later lessons.
 
 ## Files
 
@@ -53,10 +52,10 @@ still later lessons.
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
 - `worker.ts`: worker loop with atomic claim, retry backoff, and dead-letter settlement
+- `dead-letter.ts`: operator tool that requeues a dead job by id
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
-- `run-atomic-claim.sh`: resets, enqueues, runs two workers, and checks for duplicate claims
-- `run-retry-backoff.sh`: resets, enqueues, runs two workers, and summarizes retry behavior
+- `run-dead-letter.sh`: resets, enqueues, creates a poison job, and exercises dead-letter replay
 
 ## Jobs Table
 
@@ -85,31 +84,35 @@ bun install
 
 ## Useful Commands
 
-Run the retry/backoff exercise:
+Run the dead-letter exercise:
 
 ```bash
-./run-retry-backoff.sh
+./run-dead-letter.sh
 ```
 
-The script resets the database, enqueues 20 jobs, starts workers `A` and `B`,
-and stops them after 5 seconds. It prints the queue state and verifies that
-transient failures did not remain in `failed`.
+The script resets the database, enqueues normal jobs, adds one poison job with a
+missing handler, starts workers `A` and `B`, and stops them after 8 seconds. It
+prints the dead jobs, requeues one reviewed dead job with `dead-letter.ts`, and
+prints the queue again. Other dead jobs stay dead until an operator reviews and
+requeues them individually.
 
 You can override the job count and observation window:
 
 ```bash
-./run-retry-backoff.sh 30 8s
+./run-dead-letter.sh 50 10s
 ```
 
-Run the older atomic-claim exercise from phase 2b:
+Requeue a dead job manually:
 
 ```bash
-./run-atomic-claim.sh
+bun run dead-letter.ts 5
 ```
 
-In the root phase, this older script can report duplicate job ids because
-retries intentionally run the same job again. Use the phase 2b snapshot when the
-goal is to test only atomic claiming.
+Before requeueing, inspect the job payload and the relevant handler or
+underlying process. Sometimes the payload should be corrected first, for example
+with a direct SQL update or a small operator script. Sometimes the payload is
+already correct and the fix happened elsewhere, such as external data,
+credentials, or handler code. In that case, requeue the existing job as-is.
 
 Reset the local database manually:
 
