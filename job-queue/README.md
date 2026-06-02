@@ -29,33 +29,38 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 4: dead-letter handling and manual replay.
+The root is currently phase 5: leases, reaping, and crash recovery.
 
-This builds on phase 3's retry behavior. The worker retries transient failures
-until `attempts` reaches `max_attempts`. New jobs now default to `max_attempts =
-2`, so dead-letter behavior is easy to observe during the exercise.
+This builds on earlier worker claiming and retry behavior. When a worker claims a
+job, it records `locked_by` and sets `lease_expires_at`. If the worker completes
+the job, it clears the lease. If the worker dies while the job is still running,
+the row remains durable in SQLite and the expired lease gives the reaper a way to
+make the job claimable again.
 
 ```text
-job 5 attempt 1: unknown job type
-job 5 attempt 2: unknown job type
-job 5 status: dead
+worker A claims job 1 with a short lease
+worker A dies while job 1 is running
+reaper sees the expired lease and returns job 1 to queued
+worker B claims job 1 and finishes it
 ```
 
-The `dead-letter.ts` operator tool moves one dead job back to `queued` after an
-operator has investigated or fixed the underlying problem. Replay is deliberately
-manual: each dead job is reviewed, repaired if needed, and resumed by id. Crash
-recovery and idempotent handlers are still later lessons.
+This phase makes crash recovery explicit. It also introduces the at-least-once
+execution problem: the killed worker may have already performed an external side
+effect before the job is reaped and run again.
 
 ## Files
 
 - `db.ts`: opens SQLite, applies queue-related pragmas, and creates the `jobs` table
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
-- `worker.ts`: worker loop with atomic claim, retry backoff, and dead-letter settlement
+- `enqueue-report.ts`: producer that inserts a slow `build-report` job
+- `worker.ts`: worker loop with atomic claim, configurable leases, retry backoff, and settlement
+- `reaper.ts`: returns expired running jobs to `queued`
 - `dead-letter.ts`: operator tool that requeues a dead job by id
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
 - `run-dead-letter.sh`: resets, enqueues, creates a poison job, and exercises dead-letter replay
+- `run-crash-recovery.sh`: kills a worker mid-job, runs the reaper, and verifies another worker finishes the job
 
 ## Jobs Table
 
@@ -84,35 +89,33 @@ bun install
 
 ## Useful Commands
 
-Run the dead-letter exercise:
+Run the crash-recovery exercise:
+
+```bash
+./run-crash-recovery.sh
+```
+
+The script resets the database, enqueues one slow report job, starts worker `A`
+with a short lease, kills it mid-job, waits for the lease to expire, runs
+`reaper.ts`, then starts worker `B` to reclaim and finish the job.
+
+You can tune the timing:
+
+```bash
+LEASE_MS=3000 CRASH_AFTER=2s LEASE_WAIT_SECONDS=4 FINISH_WINDOW=12s ./run-crash-recovery.sh
+```
+
+Run the manual reaper:
+
+```bash
+bun run reaper.ts
+```
+
+Run the previous dead-letter exercise from the root:
 
 ```bash
 ./run-dead-letter.sh
 ```
-
-The script resets the database, enqueues normal jobs, adds one poison job with a
-missing handler, starts workers `A` and `B`, and stops them after 8 seconds. It
-prints the dead jobs, requeues one reviewed dead job with `dead-letter.ts`, and
-prints the queue again. Other dead jobs stay dead until an operator reviews and
-requeues them individually.
-
-You can override the job count and observation window:
-
-```bash
-./run-dead-letter.sh 50 10s
-```
-
-Requeue a dead job manually:
-
-```bash
-bun run dead-letter.ts 5
-```
-
-Before requeueing, inspect the job payload and the relevant handler or
-underlying process. Sometimes the payload should be corrected first, for example
-with a direct SQL update or a small operator script. Sometimes the payload is
-already correct and the fix happened elsewhere, such as external data,
-credentials, or handler code. In that case, requeue the existing job as-is.
 
 Reset the local database manually:
 

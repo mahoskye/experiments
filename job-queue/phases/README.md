@@ -13,6 +13,7 @@ that belonged to that lesson.
 - `02a-double-claim-race`: deliberate race script showing why select-then-update is not an atomic claim
 - `02b-atomic-claim`: atomic update-and-return claim that prevents duplicate claims
 - `04-dead-letter-replay`: retry exhaustion, dead-letter quarantine, and one-job manual replay
+- `05-crash-recovery`: leases, manual reaping, and reclaiming work after a worker crash
 
 ## Working Style
 
