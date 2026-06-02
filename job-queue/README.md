@@ -29,24 +29,22 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 5: leases, reaping, and crash recovery.
+The root is currently phase 5b: heartbeats for healthy long-running workers.
 
-This builds on earlier worker claiming and retry behavior. When a worker claims a
-job, it records `locked_by` and sets `lease_expires_at`. If the worker completes
-the job, it clears the lease. If the worker dies while the job is still running,
-the row remains durable in SQLite and the expired lease gives the reaper a way to
-make the job claimable again.
+This builds on phase 5's lease and reaper behavior. A worker can be healthy while
+a long job runs past the original lease. The worker now sends heartbeats while
+the handler is running, extending `lease_expires_at` so the reaper does not
+mistake healthy work for abandoned work.
 
 ```text
 worker A claims job 1 with a short lease
-worker A dies while job 1 is running
-reaper sees the expired lease and returns job 1 to queued
-worker B claims job 1 and finishes it
+worker A keeps extending the lease while the handler runs
+reaper sees the lease is still current and leaves job 1 alone
+worker A finishes job 1 on the first attempt
 ```
 
-This phase makes crash recovery explicit. It also introduces the at-least-once
-execution problem: the killed worker may have already performed an external side
-effect before the job is reaped and run again.
+The heartbeat update checks `id`, `locked_by`, `status`, and `lock_version`, so a
+stale worker cannot keep renewing a job it no longer owns.
 
 ## Files
 
@@ -54,13 +52,14 @@ effect before the job is reaped and run again.
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
 - `enqueue-report.ts`: producer that inserts a slow `build-report` job
-- `worker.ts`: worker loop with atomic claim, configurable leases, retry backoff, and settlement
+- `worker.ts`: worker loop with atomic claim, configurable leases, heartbeat renewal, retry backoff, and settlement
 - `reaper.ts`: returns expired running jobs to `queued`
 - `dead-letter.ts`: operator tool that requeues a dead job by id
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
 - `run-dead-letter.sh`: resets, enqueues, creates a poison job, and exercises dead-letter replay
 - `run-crash-recovery.sh`: kills a worker mid-job, runs the reaper, and verifies another worker finishes the job
+- `run-heartbeat.sh`: proves a healthy long-running worker keeps its lease fresh
 
 ## Jobs Table
 
@@ -89,20 +88,27 @@ bun install
 
 ## Useful Commands
 
-Run the crash-recovery exercise:
+Run the heartbeat exercise:
 
 ```bash
-./run-crash-recovery.sh
+./run-heartbeat.sh
 ```
 
 The script resets the database, enqueues one slow report job, starts worker `A`
-with a short lease, kills it mid-job, waits for the lease to expire, runs
-`reaper.ts`, then starts worker `B` to reclaim and finish the job.
+with a short lease, waits long enough that the original lease would have expired,
+runs `reaper.ts`, and verifies the job remains leased by worker `A`. It then
+waits for the job to succeed on the first attempt.
 
 You can tune the timing:
 
 ```bash
-LEASE_MS=3000 CRASH_AFTER=2s LEASE_WAIT_SECONDS=4 FINISH_WINDOW=12s ./run-crash-recovery.sh
+LEASE_MS=3000 REAPER_WAIT_SECONDS=4 FINISH_WAIT_SECONDS=20 ./run-heartbeat.sh
+```
+
+Run the previous crash-recovery exercise from the root:
+
+```bash
+./run-crash-recovery.sh
 ```
 
 Run the manual reaper:

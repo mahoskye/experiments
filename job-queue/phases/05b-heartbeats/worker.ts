@@ -63,11 +63,11 @@ const claim = db.query(`
 		lease_expires_at = $now + $leaseMs,
 		updated_at =  $now
 	WHERE id = (
-		SELECT id 
+		SELECT id
 		FROM jobs
 		WHERE status = 'queued'
-		  AND available_at <= $now 
-		ORDER BY priority DESC, id 
+		  AND available_at <= $now
+		ORDER BY priority DESC, id
 		LIMIT 1
 	)
 	RETURNING id, type, payload, attempts, max_attempts, lock_version;
@@ -103,12 +103,12 @@ while(true){
 		stopHeartbeat();
 
 		db.query(`
-			UPDATE jobs SET 
+			UPDATE jobs SET
 				status = 'succeeded',
 				locked_by = NULL,
 				lease_expires_at = NULL,
 				last_error = NULL,
-				updated_at = $now 
+				updated_at = $now
 			WHERE id = $id
 		`).run({ $now: now(), $id: job.id });
 	}

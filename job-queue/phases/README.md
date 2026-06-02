@@ -14,6 +14,7 @@ that belonged to that lesson.
 - `02b-atomic-claim`: atomic update-and-return claim that prevents duplicate claims
 - `04-dead-letter-replay`: retry exhaustion, dead-letter quarantine, and one-job manual replay
 - `05-crash-recovery`: leases, manual reaping, and reclaiming work after a worker crash
+- `05b-heartbeats`: heartbeat lease renewal for healthy long-running workers
 
 ## Working Style
 
