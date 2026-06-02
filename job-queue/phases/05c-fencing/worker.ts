@@ -68,11 +68,11 @@ const claim = db.query(`
 		lease_expires_at = $now + $leaseMs,
 		updated_at =  $now
 	WHERE id = (
-		SELECT id 
+		SELECT id
 		FROM jobs
 		WHERE status = 'queued'
-		  AND available_at <= $now 
-		ORDER BY priority DESC, id 
+		  AND available_at <= $now
+		ORDER BY priority DESC, id
 		LIMIT 1
 	)
 	RETURNING id, type, payload, attempts, max_attempts, lock_version;

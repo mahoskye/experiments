@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 5 stretch - heartbeats
+Current root state: phase 5 stretch - fencing
 
 ## Snapshot Notes
 
@@ -17,4 +17,4 @@ phase README polished and concise; do not copy rough notes verbatim.
 
 ---
 
-concept: long jobs can outlive their lease even when the worker is healthy. add a heartbeat that extends the lease while the handler is running
+concept: a stale worker can wake up after its lease expired and after another worker already claimed the job. guard settlement with lock_version. this should prevent an old worker from overwriting the state created by a newer valid claim

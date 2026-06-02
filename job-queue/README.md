@@ -29,22 +29,23 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 5b: heartbeats for healthy long-running workers.
+The root is currently phase 5c: fencing stale workers.
 
-This builds on phase 5's lease and reaper behavior. A worker can be healthy while
-a long job runs past the original lease. The worker now sends heartbeats while
-the handler is running, extending `lease_expires_at` so the reaper does not
-mistake healthy work for abandoned work.
+This builds on phase 5's leases and phase 5b's heartbeats. A stale worker can
+finish after its lease expired and after another worker already reclaimed the
+same job. The worker now fences every settlement update with `lock_version`,
+`locked_by`, and `status`, so stale success or failure writes are discarded.
 
 ```text
 worker A claims job 1 with a short lease
-worker A keeps extending the lease while the handler runs
-reaper sees the lease is still current and leaves job 1 alone
-worker A finishes job 1 on the first attempt
+worker A outlives its lease and the reaper returns job 1 to queued
+worker B claims job 1 with a newer lock_version
+worker A finishes late, but its stale settlement is discarded
+worker B owns the final succeeded state
 ```
 
-The heartbeat update checks `id`, `locked_by`, `status`, and `lock_version`, so a
-stale worker cannot keep renewing a job it no longer owns.
+This phase makes `lock_version` visible as a fencing token. It prevents an old
+claim from overwriting state created by a newer valid claim.
 
 ## Files
 
@@ -52,7 +53,7 @@ stale worker cannot keep renewing a job it no longer owns.
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
 - `enqueue-report.ts`: producer that inserts a slow `build-report` job
-- `worker.ts`: worker loop with atomic claim, configurable leases, heartbeat renewal, retry backoff, and settlement
+- `worker.ts`: worker loop with atomic claim, configurable leases, heartbeat renewal, retry backoff, and fenced settlement
 - `reaper.ts`: returns expired running jobs to `queued`
 - `dead-letter.ts`: operator tool that requeues a dead job by id
 - `inspect.ts`: prints current jobs for debugging
@@ -60,6 +61,7 @@ stale worker cannot keep renewing a job it no longer owns.
 - `run-dead-letter.sh`: resets, enqueues, creates a poison job, and exercises dead-letter replay
 - `run-crash-recovery.sh`: kills a worker mid-job, runs the reaper, and verifies another worker finishes the job
 - `run-heartbeat.sh`: proves a healthy long-running worker keeps its lease fresh
+- `run-fencing.sh`: proves stale worker settlement is discarded after a newer claim
 
 ## Jobs Table
 
@@ -88,21 +90,27 @@ bun install
 
 ## Useful Commands
 
-Run the heartbeat exercise:
+Run the fencing exercise:
 
 ```bash
-./run-heartbeat.sh
+./run-fencing.sh
 ```
 
 The script resets the database, enqueues one slow report job, starts worker `A`
-with a short lease, waits long enough that the original lease would have expired,
-runs `reaper.ts`, and verifies the job remains leased by worker `A`. It then
-waits for the job to succeed on the first attempt.
+with heartbeat disabled and a short lease, lets the reaper return that expired
+claim to `queued`, then starts worker `B`. Worker `A` eventually finishes, but
+its stale success update is discarded. Worker `B` owns the final state.
 
 You can tune the timing:
 
 ```bash
-LEASE_MS=3000 REAPER_WAIT_SECONDS=4 FINISH_WAIT_SECONDS=20 ./run-heartbeat.sh
+LEASE_MS=3000 LEASE_WAIT_SECONDS=4 FINISH_WAIT_SECONDS=20 ./run-fencing.sh
+```
+
+Run the previous heartbeat exercise from the root:
+
+```bash
+./run-heartbeat.sh
 ```
 
 Run the previous crash-recovery exercise from the root:
