@@ -29,30 +29,34 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root currently matches phase 2b: an atomic claim that prevents two workers
-from claiming the same queued job.
+The root is currently phase 3: transient failures retry with backoff and jitter
+instead of immediately becoming final failures.
 
-Phase 2b repairs the phase 2a race by replacing separate select-then-update
-steps with one `UPDATE ... RETURNING` statement. The worker only runs a job if
-the update returned the row it claimed.
+This builds on phase 2b's atomic claim. The worker still claims one queued job
+with `UPDATE ... RETURNING`, then increments `attempts` when the job starts. If
+the handler throws a transient error and attempts remain, the worker returns the
+job to `queued` with a later `available_at` time.
 
 ```text
-worker A: UPDATE one queued row to running RETURNING job 1
-worker B: UPDATE one queued row to running RETURNING job 2
+job 5 attempt 1: SMTP timeout
+job 5 status: queued, available_at: future retry time
+job 5 attempt 2: succeeds or retries again
 ```
 
-This version solves duplicate claims for queued work. It does not solve retries,
-dead-letter handling, crash recovery, or idempotency yet.
+If the worker sees a permanent error, or if a job has exhausted its configured
+attempts, the job moves to `dead`. Crash recovery and idempotent handlers are
+still later lessons.
 
 ## Files
 
 - `db.ts`: opens SQLite, applies queue-related pragmas, and creates the `jobs` table
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
-- `worker.ts`: worker loop with an atomic `UPDATE ... RETURNING` claim
+- `worker.ts`: worker loop with atomic claim, retry backoff, and dead-letter settlement
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
 - `run-atomic-claim.sh`: resets, enqueues, runs two workers, and checks for duplicate claims
+- `run-retry-backoff.sh`: resets, enqueues, runs two workers, and summarizes retry behavior
 
 ## Jobs Table
 
@@ -81,21 +85,31 @@ bun install
 
 ## Useful Commands
 
-Run the atomic-claim exercise:
+Run the retry/backoff exercise:
+
+```bash
+./run-retry-backoff.sh
+```
+
+The script resets the database, enqueues 20 jobs, starts workers `A` and `B`,
+and stops them after 5 seconds. It prints the queue state and verifies that
+transient failures did not remain in `failed`.
+
+You can override the job count and observation window:
+
+```bash
+./run-retry-backoff.sh 30 8s
+```
+
+Run the older atomic-claim exercise from phase 2b:
 
 ```bash
 ./run-atomic-claim.sh
 ```
 
-The script resets the database, enqueues 10 jobs, starts workers `A` and `B`,
-and stops them after 3 seconds. It checks the worker output for duplicate job
-claims.
-
-You can override the job count and observation window:
-
-```bash
-./run-atomic-claim.sh 25 5s
-```
+In the root phase, this older script can report duplicate job ids because
+retries intentionally run the same job again. Use the phase 2b snapshot when the
+goal is to test only atomic claiming.
 
 Reset the local database manually:
 

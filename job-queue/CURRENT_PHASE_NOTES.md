@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 2b, atomic claim prevents double-claim race
+Current root state: phase 3 retried with backoff and jitter
 
 ## Snapshot Notes
 
@@ -17,39 +17,16 @@ phase README polished and concise; do not copy rough notes verbatim.
 
 ---
 
-reset the state:
-```
-bun run reset.ts
-bun run enqueue.ts 10
-```
+concept: transient failures should retry later instead of becoming final failures immediately
 
-Bundled exercise script:
-```
-./run-atomic-claim.sh
-```
+in phase 1, every thrown error becomes failed. that loses recoverable work. in most systems (smtp timeout, network timeout, sql deadlock or temporary outages) should be retried
 
-Override job count and duration:
-```
-./run-atomic-claim.sh 25 5s
-```
+we'll add a random delay to prevent jobs from retrying at the exact same time
 
-Manual worker command:
-```
-timeout 3s bash -c 'bun run worker.ts A & bun run worker.ts B & wait'
-```
+we'll enqueue 20 send-email jobs and run 2 workers
+we should see failed email attempts return to queued with a future available_at
 
-`timeout` exits with 124 because the workers loop forever. That is expected.
-
-watch the output; the same job id should not be claimed by both workers
-
-phase 2b changed the claim from select-then-update to one update statement:
-
-```
-UPDATE jobs SET ... WHERE id = (SELECT ... LIMIT 1) RETURNING ...
-```
-
-`RETURNING` gives the worker the row it actually claimed. The `ClaimedJob` type is
-just the TypeScript shape for that returned row.
-
-expect a mix of succeeded and failed rows because the handler still randomly
-throws. The claim lesson is about avoiding duplicate job ids in worker output.
+should show that a failure is not automatically final
+available_at is the shared mechanism for delayed jobs and retry delays
+permanent failures and transient failures need different handling
+retrying immediately can make outages worse; backoff and jitter reduces pressure

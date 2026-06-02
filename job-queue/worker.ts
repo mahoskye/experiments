@@ -17,6 +17,13 @@ async function sleepWhenEmpty() {
 	await Bun.sleep(500);
 }
 
+function backoffMs(attempts: number){
+	const base = 1_000; // 1 second
+	const max = 30_000; // 30 seconds
+	const exp = Math.min(base * 2 ** (attempts - 1), max);
+	return Math.floor(Math.random() * exp) + 1; // random delay between 1ms and the exponential cap
+}
+
 const claim = db.query(`
 	UPDATE jobs SET
 		status = 'running',
@@ -66,18 +73,41 @@ while(true){
 				status = 'succeeded',
 				locked_by = NULL,
 				lease_expires_at = NULL,
+				last_error = NULL,
 				updated_at = $now 
 			WHERE id = $id
 		`).run({ $now: now(), $id: job.id });
 	}
 	catch (error) {
-		db.query(`
-			UPDATE jobs SET 
-				status = 'failed',
-				locked_by = NULL,
-				last_error = $error,
-				updated_at = $now 
-			WHERE id = $id
-		`).run({ $error: String(error), $now: now(), $id: job.id });
+
+		const message = error instanceof Error ? error.message : String(error);
+		const permanent = message.startsWith("PERMANENT:");
+		const attemptsExhausted = job.attempts >= job.max_attempts;
+
+		if(permanent || attemptsExhausted){
+			db.query(`
+				UPDATE jobs SET
+					status = 'dead',
+					locked_by = NULL,
+					lease_expires_at = NULL,
+					last_error = $error,
+					updated_at = $now
+				WHERE id = $id
+			`).run({$error: message, $now: now(), $id: job.id});
+		} else {
+
+			const next = now() + backoffMs(job.attempts);
+
+			db.query(`
+				UPDATE jobs SET
+					status = 'queued',
+					locked_by = NULL,
+					lease_expires_at = NULL,
+					available_at = $next,
+					last_error = $error,
+					updated_at = $now
+				WHERE id = $id
+			`).run({ $next: next, $error: message, $now: now(), $id: job.id });
+		}
 	}
 }
