@@ -16,6 +16,7 @@ that belonged to that lesson.
 - `05-crash-recovery`: leases, manual reaping, and reclaiming work after a worker crash
 - `05b-heartbeats`: heartbeat lease renewal for healthy long-running workers
 - `05c-fencing`: lock-version fencing that discards stale worker settlement
+- `06-idempotency`: idempotent side-effect writes with logical deduplication keys
 
 ## Working Style
 

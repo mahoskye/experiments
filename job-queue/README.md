@@ -29,23 +29,24 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 5c: fencing stale workers.
+The root is currently phase 6: idempotent side effects.
 
-This builds on phase 5's leases and phase 5b's heartbeats. A stale worker can
-finish after its lease expired and after another worker already reclaimed the
-same job. The worker now fences every settlement update with `lock_version`,
-`locked_by`, and `status`, so stale success or failure writes are discarded.
+This builds on leases, retries, reaping, and fencing. Those recovery mechanisms
+make at-least-once execution visible: the same logical work may run more than
+once. The `charge-account` handler records its side effect using a stable
+`dedupKey`, and the database prevents duplicate side-effect rows.
 
 ```text
-worker A claims job 1 with a short lease
-worker A outlives its lease and the reaper returns job 1 to queued
-worker B claims job 1 with a newer lock_version
-worker A finishes late, but its stale settlement is discarded
-worker B owns the final succeeded state
+job 1 charges account a1 with dedupKey charge-123
+job 2 repeats the same logical charge with dedupKey charge-123
+both jobs succeed
+only one side-effect row is inserted
 ```
 
-This phase makes `lock_version` visible as a fencing token. It prevents an old
-claim from overwriting state created by a newer valid claim.
+SQLite enforces the idempotency key with `ON CONFLICT(dedup_key) DO NOTHING`.
+Different databases use different SQL syntax, but the concept is the same:
+choose a stable logical key, enforce uniqueness, and treat duplicate writes as
+"already done."
 
 ## Files
 
@@ -53,15 +54,13 @@ claim from overwriting state created by a newer valid claim.
 - `handlers.ts`: dispatch registry for business logic keyed by job `type`
 - `enqueue.ts`: producer that inserts queued jobs
 - `enqueue-report.ts`: producer that inserts a slow `build-report` job
+- `enqueue-charge-account.ts`: producer that inserts duplicate logical charge jobs
 - `worker.ts`: worker loop with atomic claim, configurable leases, heartbeat renewal, retry backoff, and fenced settlement
 - `reaper.ts`: returns expired running jobs to `queued`
 - `dead-letter.ts`: operator tool that requeues a dead job by id
 - `inspect.ts`: prints current jobs for debugging
 - `reset.ts`: removes local SQLite database files
-- `run-dead-letter.sh`: resets, enqueues, creates a poison job, and exercises dead-letter replay
-- `run-crash-recovery.sh`: kills a worker mid-job, runs the reaper, and verifies another worker finishes the job
-- `run-heartbeat.sh`: proves a healthy long-running worker keeps its lease fresh
-- `run-fencing.sh`: proves stale worker settlement is discarded after a newer claim
+- `run-idempotency.sh`: runs duplicate logical charge jobs and verifies one side effect
 
 ## Jobs Table
 
@@ -90,45 +89,20 @@ bun install
 
 ## Useful Commands
 
-Run the fencing exercise:
+Run the idempotency exercise:
 
 ```bash
-./run-fencing.sh
+./run-idempotency.sh
 ```
 
-The script resets the database, enqueues one slow report job, starts worker `A`
-with heartbeat disabled and a short lease, lets the reaper return that expired
-claim to `queued`, then starts worker `B`. Worker `A` eventually finishes, but
-its stale success update is discarded. Worker `B` owns the final state.
+The script resets the database, enqueues two `charge-account` jobs with the same
+logical `dedupKey`, runs workers, and verifies that both jobs succeeded but only
+one `side_effects` row was written.
 
-You can tune the timing:
-
-```bash
-LEASE_MS=3000 LEASE_WAIT_SECONDS=4 FINISH_WAIT_SECONDS=20 ./run-fencing.sh
-```
-
-Run the previous heartbeat exercise from the root:
+You can override the job count, dedup key, and observation window:
 
 ```bash
-./run-heartbeat.sh
-```
-
-Run the previous crash-recovery exercise from the root:
-
-```bash
-./run-crash-recovery.sh
-```
-
-Run the manual reaper:
-
-```bash
-bun run reaper.ts
-```
-
-Run the previous dead-letter exercise from the root:
-
-```bash
-./run-dead-letter.sh
+./run-idempotency.sh 2 charge-123 3s
 ```
 
 Reset the local database manually:
@@ -141,6 +115,12 @@ Enqueue jobs manually:
 
 ```bash
 bun run enqueue.ts 10
+```
+
+Enqueue duplicate logical charge jobs manually:
+
+```bash
+bun run enqueue-charge-account.ts 2 charge-123 a1 42
 ```
 
 Inspect state:

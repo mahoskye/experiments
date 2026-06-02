@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 5 stretch - fencing
+Current root state: phase 6 - idempotency
 
 ## Snapshot Notes
 
@@ -17,4 +17,10 @@ phase README polished and concise; do not copy rough notes verbatim.
 
 ---
 
-concept: a stale worker can wake up after its lease expired and after another worker already claimed the job. guard settlement with lock_version. this should prevent an old worker from overwriting the state created by a newer valid claim
+concept: at-least-once execution means the same logical work may run more than once
+
+leases and retries recover work, but they also make duplicate execution possible. Example: a worker charges an account, then crashes before marking the job succeeded. the reaper requeues the job. another worker runs it again. without idempotency, the account is charged twice
+
+to test this we'll expand the db to have a side effects table with dedup_key, info, and created_at
+
+we'll also add a handler for charge-account that inserts into the table
