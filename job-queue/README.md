@@ -27,6 +27,9 @@ The root directory remains the active workspace for continuing the experiment.
 When a phase reaches a useful stopping point, copy the relevant files into a new
 snapshot directory and document what that phase is meant to teach.
 
+See `ROADMAP.md` for future phase ideas derived from
+`batch-queue-architecture.md`.
+
 ## Current Phase
 
 The root is currently phase 8: cleanup pass for future experiments.
