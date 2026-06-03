@@ -42,8 +42,6 @@ current root so future experiments are easier to run and reason about:
 - root TypeScript files have clearer comments around the queue concepts they
   demonstrate
 - reusable shell exercises live in `scripts/`
-- the old root `run-monitoring.sh` remains as a wrapper for the monitoring
-  exercise
 
 ## Files
 
@@ -59,7 +57,6 @@ current root so future experiments are easier to run and reason about:
 - `stats.ts`: prints count by status and oldest queued job age
 - `reset.ts`: removes local SQLite database files
 - `scripts/`: runnable behavior exercises copied forward from the phase history
-- `run-monitoring.sh`: compatibility wrapper for `scripts/run-monitoring.sh`
 
 ## Jobs Table
 
@@ -103,12 +100,6 @@ scripts/run-monitoring.sh
 Each script resets the database, sets up a focused scenario, runs workers or
 operator tools, prints the queue state, and performs a small assertion about the
 behavior being demonstrated.
-
-Run the monitoring exercise through the compatibility wrapper:
-
-```bash
-./run-monitoring.sh
-```
 
 You can override the job count, worker window, and stopped-worker wait:
 
