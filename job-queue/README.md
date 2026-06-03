@@ -29,23 +29,18 @@ snapshot directory and document what that phase is meant to teach.
 
 ## Current Phase
 
-The root is currently phase 7: monitoring queue shape.
+The root is currently phase 8: cleanup pass for future experiments.
 
-This phase adds a small stats surface for operating the queue. A worker process
-can be alive while the queue is still unhealthy, so the useful signals are the
-shape of the durable rows: how many jobs are queued, running, succeeded, or dead,
-and how long the oldest queued job has been waiting.
+This phase does not add a new queue reliability mechanism. It cleans up the
+current root so future experiments are easier to run and reason about:
 
-```text
-queued depth: 80
-workers run briefly
-queued depth: 60
-workers stop
-oldest queued age continues to climb
-```
-
-The point is not a sophisticated metrics system yet. The point is learning which
-queue signals matter before adding dashboards, alerts, or background monitoring.
+- `worker.ts` is decomposed into smaller lifecycle functions while staying in
+  one file
+- root TypeScript files have clearer comments around the queue concepts they
+  demonstrate
+- reusable shell exercises live in `scripts/`
+- the old root `run-monitoring.sh` remains as a wrapper for the monitoring
+  exercise
 
 ## Files
 
@@ -60,7 +55,8 @@ queue signals matter before adding dashboards, alerts, or background monitoring.
 - `inspect.ts`: prints current jobs for debugging
 - `stats.ts`: prints count by status and oldest queued job age
 - `reset.ts`: removes local SQLite database files
-- `run-monitoring.sh`: exercises the stats view while workers drain part of the queue
+- `scripts/`: runnable behavior exercises copied forward from the phase history
+- `run-monitoring.sh`: compatibility wrapper for `scripts/run-monitoring.sh`
 
 ## Jobs Table
 
@@ -89,21 +85,32 @@ bun install
 
 ## Useful Commands
 
-Run the monitoring exercise:
+Run the behavior exercises:
+
+```bash
+scripts/run-atomic-claim.sh
+scripts/run-dead-letter.sh
+scripts/run-crash-recovery.sh
+scripts/run-heartbeat.sh
+scripts/run-fencing.sh
+scripts/run-idempotency.sh
+scripts/run-monitoring.sh
+```
+
+Each script resets the database, sets up a focused scenario, runs workers or
+operator tools, prints the queue state, and performs a small assertion about the
+behavior being demonstrated.
+
+Run the monitoring exercise through the compatibility wrapper:
 
 ```bash
 ./run-monitoring.sh
 ```
 
-The script resets the database, enqueues many jobs, prints stats, runs workers
-briefly, prints stats again, stops workers while queued jobs remain, then waits
-and prints stats a final time. The oldest queued age should climb while workers
-are stopped.
-
 You can override the job count, worker window, and stopped-worker wait:
 
 ```bash
-./run-monitoring.sh 80 2s 3
+scripts/run-monitoring.sh 80 2s 3
 ```
 
 Run stats once:

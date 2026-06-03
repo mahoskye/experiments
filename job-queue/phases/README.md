@@ -18,6 +18,7 @@ that belonged to that lesson.
 - `05c-fencing`: lock-version fencing that discards stale worker settlement
 - `06-idempotency`: idempotent side-effect writes with logical deduplication keys
 - `07-monitoring`: queue depth and oldest queued age as basic operational signals
+- `08-cleanup-pass`: worker decomposition, clearer comments, and reusable behavior scripts for future experiments
 
 ## Working Style
 

@@ -8,7 +8,7 @@ polished explanation.
 
 ## Phase
 
-Current root state: phase 7 - monitoring
+Current root state: phase 8 - cleanup pass for future experiments
 
 ## Snapshot Notes
 
@@ -17,14 +17,15 @@ phase README polished and concise; do not copy rough notes verbatim.
 
 ---
 
-concept: you operate a queue by watching its shape, not just checking whether workers are alive
+concept: cleanup can be part of the learning sequence when it makes future
+experiments easier to run and inspect
 
-we'll create a stats script that will monitor things like count by status and oldest queued job
+phase 8 did not add a new queue reliability mechanism
 
-we'll enqueue many jobs, run stats, start the workers and watch the queue drain, we'll stop workers while jobs remain queued, then watch oldest queued age climb
+what changed:
+- worker.ts was decomposed into smaller lifecycle functions
+- comments were added around queue concepts in the root TypeScript files
+- behavior scripts from previous phases were copied into scripts/
+- scripts were revised to test the current desired behavior
 
-this should demonstrate
-- queue depth tells you how much work exists
-- oldest queued age tells you whether the system is keeping up
-- dead letter count tells you whether work is failing in a way people must inspect
-- a worker can be alive while the queue is still unhealthy
+next phase notes can start below this line
